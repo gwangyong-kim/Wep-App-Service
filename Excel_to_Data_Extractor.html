@@ -48,10 +48,10 @@
 
     <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
-            엑셀 to 구글 시트 업로더 (Gemini 자동 분석)
+            엑셀 to 구글 시트 업로더
         </h1>
         <p class="text-gray-600 mb-8">
-            엑셀 파일을 선택하고, Gemini의 분석 결과를 확인한 후, 구글 시트로 데이터를 전송합니다.
+            엑셀 파일을 선택하고, 준비된 데이터를 확인한 후, 선택된 구글 시트로 데이터를 전송합니다.
         </p>
 
         <!-- 단계별 컨테이너 -->
@@ -86,16 +86,16 @@
                 <p id="sheetLoadStatus" class="mt-2 text-sm text-gray-500"></p>
             </div>
 
-            <!-- 3단계: 자동 분석 및 수동 전송 -->
+            <!-- 3단계: 데이터 확인 및 전송 -->
             <div id="process-step" class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 분석 및 수동 전송</h2>
-                <p id="autoProcessStatus" class="text-base text-blue-700">파일 로드 후 자동 분석 결과를 대기합니다.</p>
+                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 확인 및 전송</h2>
+                <p id="autoProcessStatus" class="text-base text-blue-700">엑셀 파일을 로드하여 데이터 미리보기를 확인하세요.</p>
                 <div id="processIndicator" class="hidden mt-3 text-blue-600 font-semibold flex items-center mb-4">
                     <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span id="currentProcessMessage">자동 분석 진행 중...</span>
+                    <span id="currentProcessMessage">전송 준비 중...</span>
                 </div>
                 <!-- 수동 전송 버튼 추가 -->
                 <button id="uploadButton" onclick="manualUpload()" 
@@ -105,16 +105,6 @@
                 </button>
             </div>
 
-        </div>
-
-        <!-- Gemini 분석 결과 섹션 -->
-        <div id="analysisResultSection" class="mt-10 p-6 bg-gray-50 border border-gray-200 rounded-xl shadow-inner hidden">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-3 flex items-center">
-                ✨ Gemini 데이터 분석 결과
-            </h2>
-            <div id="analysisResult" class="prose max-w-none text-gray-700 text-sm overflow-x-auto">
-                <!-- 분석 결과가 여기에 표시됩니다. -->
-            </div>
         </div>
 
         <!-- 엑셀 데이터 미리보기 -->
@@ -141,11 +131,9 @@
 
     <script>
         // =======================================================================
-        // 🚨 사용자 설정: 여기에 API Key와 GAS URL을 넣어주세요!
+        // 🚨 사용자 설정: 여기에 GAS URL을 넣어주세요!
         // =======================================================================
-        // 1. Gemini API Key (Gemini 분석에 필요)
-        const API_KEY = "AIzaSyA7Y9pWfubGOiShAAAHsA2Tu3BP25FLajs";
-        // 2. Google Apps Script 웹 앱 URL (데이터 전송에 필요)
+        // Google Apps Script 웹 앱 URL (데이터 전송에 필요)
         const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbztEmU4D4hl6AHzcRtmHVSqP9nZa6LxHUZLJXXPArAEzQAt3b2ChtvCDaPHJt85cfuf/exec";
 
         // =======================================================================
@@ -153,7 +141,7 @@
         // =======================================================================
         let extractedData = [];
         let isFileLoaded = false;
-        let isAnalysisDone = false;
+        // isAnalysisDone 상태는 제거됨.
 
         // =======================================================================
         // UI 유틸리티
@@ -199,14 +187,12 @@
 
             // 새로운 파일 로드 시 전송 버튼 비활성화 및 상태 초기화
             document.getElementById('uploadButton').disabled = true;
-            document.getElementById('autoProcessStatus').innerText = "파일 로드 후 자동 분석 결과를 대기합니다.";
+            document.getElementById('autoProcessStatus').innerText = "파일 로드 후 데이터 미리보기를 확인하세요.";
 
             document.getElementById('fileNameDisplay').innerText = `선택된 파일: ${file.name}`;
             document.getElementById('loadingIndicator').classList.remove('hidden');
             document.getElementById('previewSection').classList.add('hidden');
-            document.getElementById('analysisResultSection').classList.add('hidden');
             isFileLoaded = false;
-            isAnalysisDone = false;
             updateProcessIndicator('파일 로드 준비 중...', true);
 
             const reader = new FileReader();
@@ -233,15 +219,17 @@
                     
                     showMessageBox(`✅ 파일 로드 성공: ${extractedData.length}행 데이터 추출 완료`, 'success');
 
-                    // 파일 로드 성공 후, 바로 자동 분석 시작
-                    updateProcessIndicator('파일 로드 완료. Gemini 자동 분석 시작...', true);
-                    await analyzeData(extractedData);
+                    // 파일 로드 성공 후, 바로 전송 버튼 활성화 및 상태 업데이트 (분석 단계 건너뛰기)
+                    updateProcessIndicator('데이터 로드 완료. 전송 준비됨.', false);
+                    document.getElementById('uploadButton').disabled = false;
+                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 로드가 완료되었습니다. '전송' 버튼을 눌러 구글 시트에 덮어쓰세요.";
 
-                    // 자동 전송 코드는 이제 제거됨. 버튼 활성화는 analyzeData 함수에서 처리됩니다.
 
                 } catch (error) {
                     showMessageBox(`❌ 파일 처리 오류: ${error.message}`, 'error');
                     console.error("파일 처리 오류:", error);
+                    document.getElementById('autoProcessStatus').innerText = `❌ 파일 처리 오류: ${error.message}`;
+                    document.getElementById('uploadButton').disabled = true;
                 } finally {
                     document.getElementById('loadingIndicator').classList.add('hidden');
                 }
@@ -334,105 +322,7 @@
         }
 
         // =======================================================================
-        // 3단계: Gemini 분석 (자동 실행)
-        // =======================================================================
-
-        // 지수 백오프를 사용하는 fetch 래퍼 함수 (API 안정성 향상)
-        async function fetchWithBackoff(url, options, retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.status === 429 && i < retries - 1) { // 429 Too Many Requests (Gemini API Throttling)
-                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                    return response;
-                } catch (error) {
-                    if (i < retries - 1) {
-                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                    throw error;
-                }
-            }
-            throw new Error("API 요청에 실패했습니다 (최대 재시도 횟수 초과).");
-        }
-        
-        async function analyzeData(data) {
-            isAnalysisDone = false;
-            document.getElementById('analysisResultSection').classList.add('hidden');
-            const resultEl = document.getElementById('analysisResult');
-            resultEl.innerHTML = '<p>데이터 분석을 위해 Gemini API에 요청을 보내는 중입니다...</p>';
-            
-            if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !API_KEY) {
-                showMessageBox("❌ Gemini API Key가 설정되지 않았습니다. 분석을 건너킵니다.", 'error');
-                isAnalysisDone = false;
-                document.getElementById('autoProcessStatus').innerText = "❌ Gemini API Key 미설정으로 분석 건너뜀.";
-                document.getElementById('uploadButton').disabled = true;
-                return;
-            }
-
-            // 분석을 위해 데이터 상위 50행만 샘플링
-            const sampleData = data.slice(0, 50);
-            const dataString = JSON.stringify(sampleData);
-            
-            const systemPrompt = `당신은 데이터 품질 분석 전문가입니다. 다음 JSON 데이터 샘플을 분석하여 한국어로 요약해 주세요. 분석 내용은 간결하고 명확하게 Markdown 포맷으로 작성해 주세요.`;
-            const userQuery = `다음은 엑셀에서 추출된 데이터의 상위 50개 행의 JSON 문자열입니다. 이 데이터의 특징, 각 열의 예상 데이터 유형(문자열, 숫자, 날짜 등), 그리고 구글 시트 업로드 전에 정리해야 할 잠재적인 문제점(예: 빈 값, 일관성 없는 형식, 헤더 누락 등)을 분석해 주세요. 데이터: ${dataString}`;
-            
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-            };
-            
-            try {
-                updateProcessIndicator('Gemini 모델이 데이터를 분석 중입니다...', true);
-                
-                const response = await fetchWithBackoff(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}. API 키나 네트워크 연결을 확인해 주세요.`);
-                }
-
-                const result = await response.json();
-                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                if (text) {
-                    // Markdown을 HTML로 변환하여 표시
-                    resultEl.innerHTML = marked.parse(text);
-                    document.getElementById('analysisResultSection').classList.remove('hidden');
-                    showMessageBox('✨ 데이터 분석 성공: 분석 결과를 확인하세요.', 'info');
-                    isAnalysisDone = true;
-                } else {
-                    throw new Error("Gemini 응답에서 텍스트를 찾을 수 없습니다.");
-                }
-
-            } catch (error) {
-                resultEl.innerHTML = `<p class="text-red-600 font-semibold">❌ 분석 오류 발생: ${error.message}.</p>`;
-                document.getElementById('analysisResultSection').classList.remove('hidden');
-                showMessageBox(`❌ 분석 오류 발생: ${error.message}`, 'error');
-                isAnalysisDone = false;
-                document.getElementById('autoProcessStatus').innerText = "❌ 데이터 분석에 실패했습니다. 전송할 수 없습니다.";
-                document.getElementById('uploadButton').disabled = true;
-
-            } finally {
-                updateProcessIndicator('분석 완료.', false);
-                if (isAnalysisDone) {
-                    document.getElementById('uploadButton').disabled = false;
-                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 분석이 완료되었습니다. '전송' 버튼을 눌러주세요.";
-                }
-            }
-        }
-        
-        // =======================================================================
-        // 4단계: 수동 전송 함수
+        // 3단계: 수동 전송 함수
         // =======================================================================
         
         async function manualUpload() {
@@ -443,17 +333,10 @@
         }
 
         // =======================================================================
-        // 5단계: 구글 시트 전송 (manualUpload에서 호출)
+        // 4단계: 구글 시트 전송 (manualUpload에서 호출)
         // =======================================================================
         
         async function uploadDataToSheets(data) {
-            if (!isAnalysisDone) {
-                showMessageBox("❌ 분석 과정이 완료되지 않아 전송을 시작할 수 없습니다. 분석 오류를 확인하세요.", 'error');
-                updateProcessIndicator('전송 중단: 분석 실패.', false);
-                document.getElementById('uploadButton').disabled = true; // 재확인
-                return;
-            }
-
             const sheetName = document.getElementById('sheetNameSelect').value;
 
             if (!sheetName) {
@@ -487,6 +370,7 @@
             try {
                 updateProcessIndicator(`데이터를 '${sheetName}' 시트로 전송 중 (기존 데이터 삭제 후 덮어쓰기)...`, true);
                 
+                // Gemini API에 사용되던 지수 백오프 fetch 대신 일반 fetch를 사용
                 const response = await fetch(GAS_WEB_APP_URL, {
                     method: 'POST',
                     body: finalJson
@@ -502,7 +386,6 @@
 
                 const result = await response.json();
 
-                // GAS 코드(Code.gs)에서 rowsAppended 대신 rowsWritten을 사용하므로 이를 확인합니다.
                 if (result.success) {
                     showMessageBox(`✅ 데이터 전송 성공! '${result.sheetName}' 시트의 기존 데이터를 삭제하고 ${result.rowsWritten}행을 덮어썼습니다.`, 'success');
                     document.getElementById('autoProcessStatus').innerText = "✅ 데이터 전송 완료! 다른 파일을 로드하세요.";
