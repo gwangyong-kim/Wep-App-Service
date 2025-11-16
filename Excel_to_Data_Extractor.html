@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>엑셀 데이터 추출 및 업로더</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (엑셀 파일 파싱 라이브러리) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- MarkedJS (Gemini API의 Markdown 출력을 HTML로 변환) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.12/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* 상태 메시지 박스 스타일 */
+        #message-box {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: none; /* 초기에는 숨김 */
+            font-weight: 600;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .success {
+            background-color: #10b981; /* green-500 */
+            color: white;
+        }
+        .error {
+            background-color: #ef4444; /* red-500 */
+            color: white;
+        }
+        .info {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
+            엑셀 to 구글 시트 업로더 (Gemini 자동 분석 포함)
+        </h1>
+        <p class="text-gray-600 mb-8">
+            엑셀 파일을 선택하고, Gemini의 분석 결과를 확인한 후, 선택된 구글 시트로 데이터를 자동으로 전송합니다.
+        </p>
+
+        <!-- 단계별 컨테이너 -->
+        <div class="space-y-8">
+
+            <!-- 0단계: API Key 설정 (코드로 통합) -->
+            <div id="setup-step" class="p-5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-yellow-800 mb-2">✅ 설정 완료 (코드 내부 통합)</h2>
+                <p class="text-sm text-yellow-700">Gemini API Key와 Google Apps Script URL은 이 웹 앱의 JavaScript 코드 내부에 직접 설정되어 있습니다. (실행 전 코드 확인 필수)</p>
+            </div>
+
+
+            <!-- 1단계: 엑셀 파일 로드 -->
+            <div id="load-step" class="p-5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-indigo-800 mb-4">1단계: 엑셀 파일 로드</h2>
+                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-indigo-500 file:text-white
+                    hover:file:bg-indigo-600" onchange="loadExcelFile(event)">
+                <p id="fileNameDisplay" class="mt-3 text-sm text-gray-700"></p>
+                <div id="loadingIndicator" class="hidden mt-3 text-indigo-600 font-semibold flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>파일을 읽는 중...</span>
+                </div>
+            </div>
+            
+            <!-- 2단계: 대상 시트 선택 -->
+            <div id="select-sheet-step" class="p-5 bg-purple-50 border border-purple-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-purple-800 mb-4">2단계: 대상 시트 선택</h2>
+                <label for="sheetNameSelect" class="block text-sm font-medium text-gray-700 mb-2">구글 시트의 대상 시트를 선택하세요:</label>
+                <select id="sheetNameSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-purple-500 focus:ring-purple-500" disabled>
+                    <option value="" disabled selected>시트 목록을 불러오는 중...</option>
+                </select>
+                <p id="sheetLoadStatus" class="mt-2 text-sm text-gray-500"></p>
+            </div>
+
+            <!-- 3단계: 자동 분석 및 전송 상태 -->
+            <div id="process-step" class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 자동 분석 및 전송</h2>
+                <p id="autoProcessStatus" class="text-base text-blue-700">파일 로드 후 자동 분석 및 전송을 대기합니다.</p>
+                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-semibold flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="currentProcessMessage">자동 분석 진행 중...</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Gemini 분석 결과 섹션 -->
+        <div id="analysisResultSection" class="mt-10 p-6 bg-gray-50 border border-gray-200 rounded-xl shadow-inner hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-3 flex items-center">
+                ✨ Gemini 데이터 분석 결과
+            </h2>
+            <div id="analysisResult" class="prose max-w-none text-gray-700 text-sm overflow-x-auto">
+                <!-- 분석 결과가 여기에 표시됩니다. -->
+            </div>
+        </div>
+
+        <!-- 엑셀 데이터 미리보기 -->
+        <div id="previewSection" class="mt-10 p-6 bg-gray-50 border border-gray-200 rounded-xl shadow-inner hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-3">
+                데이터 미리보기 (상위 10행)
+            </h2>
+            <div class="overflow-x-auto max-h-96">
+                <table id="dataTable" class="min-w-full divide-y divide-gray-300">
+                    <thead class="bg-gray-200 sticky top-0">
+                        <!-- 헤더는 JS에서 생성됩니다 -->
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white">
+                        <!-- 데이터는 JS에서 생성됩니다 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 상태 메시지 박스 -->
+    <div id="message-box" class="opacity-0"></div>
+
+    <script>
+        // =======================================================================
+        // 🚨 사용자 설정: 여기에 API Key와 GAS URL을 넣어주세요!
+        // =======================================================================
+        // 1. Gemini API Key (Gemini 분석에 필요)
+        const API_KEY = "AIzaSyA7Y9pWfubGOiShAAAHsA2Tu3BP25FLajs";
+        // 2. Google Apps Script 웹 앱 URL (데이터 전송에 필요)
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbweANY4FIXOQwXDbNl0xNgqYTQB2f2aLz67qBWcHstmIpKVTSjglkMrX8DGw1elIZ6y/exec";
+
+        // =======================================================================
+        // 전역 변수 및 상태 관리
+        // =======================================================================
+        let extractedData = [];
+        let isFileLoaded = false;
+        let isAnalysisDone = false;
+
+        // =======================================================================
+        // UI 유틸리티
+        // =======================================================================
+
+        function showMessageBox(message, type = 'info') {
+            const box = document.getElementById('message-box');
+            box.className = ''; // 기존 클래스 초기화
+            box.classList.add(type);
+            box.classList.add('opacity-100');
+            box.innerText = message;
+            box.style.display = 'block';
+
+            // 4초 후 사라지도록 설정
+            setTimeout(() => {
+                box.classList.remove('opacity-100');
+                box.classList.add('opacity-0');
+                setTimeout(() => {
+                    box.style.display = 'none';
+                }, 300); // fade out 시간
+            }, 4000);
+        }
+
+        function updateProcessIndicator(message, isWorking = true) {
+            const indicator = document.getElementById('processIndicator');
+            const messageEl = document.getElementById('currentProcessMessage');
+            
+            messageEl.innerText = message;
+            if (isWorking) {
+                indicator.classList.remove('hidden');
+            } else {
+                indicator.classList.add('hidden');
+            }
+        }
+        
+        // =======================================================================
+        // 1단계: 엑셀 파일 로드
+        // =======================================================================
+
+        function loadExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileNameDisplay').innerText = `선택된 파일: ${file.name}`;
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('previewSection').classList.add('hidden');
+            document.getElementById('analysisResultSection').classList.add('hidden');
+            isFileLoaded = false;
+            isAnalysisDone = false;
+            updateProcessIndicator('파일 로드 준비 중...', true);
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // 첫 번째 시트의 데이터를 가져옴
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // 데이터를 배열의 배열 (AOA: Array of Arrays) 형태로 변환
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length === 0) {
+                        showMessageBox('엑셀 파일에 데이터가 없습니다.', 'error');
+                        return;
+                    }
+
+                    extractedData = jsonData;
+                    displayDataPreview(extractedData);
+                    isFileLoaded = true;
+                    
+                    showMessageBox(`✅ 파일 로드 성공: ${extractedData.length}행 데이터 추출 완료`, 'success');
+
+                    // 파일 로드 성공 후, 바로 자동 분석 시작
+                    updateProcessIndicator('파일 로드 완료. Gemini 자동 분석 시작...', true);
+                    await analyzeData(extractedData);
+
+                    // 분석 완료 후, 바로 전송 시작
+                    if (isAnalysisDone) {
+                        updateProcessIndicator('분석 완료. 구글 시트 전송 시작...', true);
+                        await uploadDataToSheets(extractedData);
+                    }
+
+
+                } catch (error) {
+                    showMessageBox(`❌ 파일 처리 오류: ${error.message}`, 'error');
+                    console.error("파일 처리 오류:", error);
+                } finally {
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function displayDataPreview(data) {
+            const table = document.getElementById('dataTable');
+            const tbody = table.querySelector('tbody');
+            const thead = table.querySelector('thead');
+            
+            // 테이블 초기화
+            tbody.innerHTML = '';
+            thead.innerHTML = '';
+            
+            if (data.length === 0) {
+                document.getElementById('previewSection').classList.add('hidden');
+                return;
+            }
+
+            // 헤더 생성 (첫 행)
+            const headerRow = data[0];
+            const headerHtml = `<tr>${headerRow.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h || ''}</th>`).join('')}</tr>`;
+            thead.innerHTML = headerHtml;
+
+            // 데이터 행 생성 (최대 10행)
+            const rows = data.slice(1, 11); // 헤더 제외하고 10개만 미리보기
+            rows.forEach(row => {
+                const rowHtml = `<tr>${row.map(cell => `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${cell === null || cell === undefined ? '' : cell}</td>`).join('')}</tr>`;
+                tbody.innerHTML += rowHtml;
+            });
+
+            document.getElementById('previewSection').classList.remove('hidden');
+        }
+
+        // =======================================================================
+        // 2단계: 시트 목록 로드 (페이지 로드 시 자동 실행)
+        // =======================================================================
+
+        async function fetchSheetNames() {
+            const selectEl = document.getElementById('sheetNameSelect');
+            const statusEl = document.getElementById('sheetLoadStatus');
+            selectEl.disabled = true;
+
+            if (GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE" || !GAS_WEB_APP_URL) {
+                statusEl.innerHTML = '<span class="text-red-500 font-semibold">❌ GAS URL이 설정되지 않았습니다. 코드 내부를 확인하세요.</span>';
+                selectEl.innerHTML = '<option value="" disabled selected>GAS URL 미설정</option>';
+                return;
+            }
+            
+            statusEl.innerText = '구글 시트의 시트 목록을 가져오는 중...';
+
+            try {
+                // GAS 웹 앱에 GET 요청을 보냄
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success && Array.isArray(result.sheetNames)) {
+                    selectEl.innerHTML = '';
+                    result.sheetNames.forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.innerText = name;
+                        selectEl.appendChild(option);
+                    });
+                    selectEl.disabled = false;
+                    statusEl.innerHTML = `<span class="text-green-600">✅ 시트 목록 ${result.sheetNames.length}개 로드 완료.</span>`;
+                    // 첫 번째 시트를 기본 선택
+                    if (result.sheetNames.length > 0) {
+                        selectEl.value = result.sheetNames[0];
+                    }
+                } else {
+                    throw new Error(result.error || "GAS 서버에서 유효하지 않은 응답을 받았습니다.");
+                }
+
+            } catch (error) {
+                statusEl.innerHTML = `<span class="text-red-500 font-semibold">❌ 시트 목록 로드 오류: ${error.message}. GAS 권한 및 URL을 확인하세요.</span>`;
+                console.error("시트 목록 로드 오류:", error);
+                selectEl.innerHTML = '<option value="" disabled selected>오류로 목록 로드 실패</option>';
+            }
+        }
+
+        // =======================================================================
+        // 3단계: Gemini 분석 (자동 실행)
+        // =======================================================================
+
+        // 지수 백오프를 사용하는 fetch 래퍼 함수 (API 안정성 향상)
+        async function fetchWithBackoff(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 && i < retries - 1) { // 429 Too Many Requests
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    return response;
+                } catch (error) {
+                    if (i < retries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    throw error;
+                }
+            }
+            throw new Error("API 요청에 실패했습니다 (최대 재시도 횟수 초과).");
+        }
+        
+        async function analyzeData(data) {
+            isAnalysisDone = false;
+            document.getElementById('analysisResultSection').classList.add('hidden');
+            const resultEl = document.getElementById('analysisResult');
+            resultEl.innerHTML = '<p>데이터 분석을 위해 Gemini API에 요청을 보내는 중입니다...</p>';
+            
+            if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !API_KEY) {
+                showMessageBox("❌ Gemini API Key가 설정되지 않았습니다. 분석을 건너뜁니다.", 'error');
+                isAnalysisDone = true; // 분석 실패로 처리
+                return;
+            }
+
+            // 분석을 위해 데이터 상위 50행만 샘플링
+            const sampleData = data.slice(0, 50);
+            const dataString = JSON.stringify(sampleData);
+            
+            const systemPrompt = `당신은 데이터 품질 분석 전문가입니다. 다음 JSON 데이터 샘플을 분석하여 한국어로 요약해 주세요. 분석 내용은 간결하고 명확하게 Markdown 포맷으로 작성해 주세요.`;
+            const userQuery = `다음은 엑셀에서 추출된 데이터의 상위 50개 행의 JSON 문자열입니다. 이 데이터의 특징, 각 열의 예상 데이터 유형(문자열, 숫자, 날짜 등), 그리고 구글 시트 업로드 전에 정리해야 할 잠재적인 문제점(예: 빈 값, 일관성 없는 형식, 헤더 누락 등)을 분석해 주세요. 데이터: ${dataString}`;
+            
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+            
+            try {
+                updateProcessIndicator('Gemini 모델이 데이터를 분석 중입니다...', true);
+                
+                const response = await fetchWithBackoff(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}. API 키나 네트워크 연결을 확인해 주세요.`);
+                }
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text) {
+                    // Markdown을 HTML로 변환하여 표시
+                    resultEl.innerHTML = marked.parse(text);
+                    document.getElementById('analysisResultSection').classList.remove('hidden');
+                    showMessageBox('✨ 데이터 분석 성공: 분석 결과를 확인하세요.', 'info');
+                    isAnalysisDone = true;
+                } else {
+                    throw new Error("Gemini 응답에서 텍스트를 찾을 수 없습니다.");
+                }
+
+            } catch (error) {
+                resultEl.innerHTML = `<p class="text-red-600 font-semibold">❌ 분석 오류 발생: ${error.message}.</p>`;
+                document.getElementById('analysisResultSection').classList.remove('hidden');
+                showMessageBox(`❌ 분석 오류 발생: ${error.message}`, 'error');
+                isAnalysisDone = false; // 분석 실패로 전송 중단
+            } finally {
+                updateProcessIndicator('분석 완료.', false);
+            }
+        }
+
+        // =======================================================================
+        // 4단계: 구글 시트 전송 (자동 실행)
+        // =======================================================================
+        
+        async function uploadDataToSheets(data) {
+            if (!isAnalysisDone) {
+                showMessageBox("❌ 분석 과정이 완료되지 않아 전송을 시작할 수 없습니다. 분석 오류를 확인하세요.", 'error');
+                updateProcessIndicator('전송 중단: 분석 실패.', false);
+                return;
+            }
+
+            const sheetName = document.getElementById('sheetNameSelect').value;
+
+            if (!sheetName) {
+                showMessageBox("❌ 대상 시트가 선택되지 않았습니다.", 'error');
+                updateProcessIndicator('전송 중단: 시트 미선택.', false);
+                return;
+            }
+
+            if (GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE" || !GAS_WEB_APP_URL) {
+                showMessageBox("❌ GAS URL이 설정되지 않았습니다. 코드 내부를 확인하세요.", 'error');
+                updateProcessIndicator('전송 중단: GAS URL 미설정.', false);
+                return;
+            }
+
+            if (data.length === 0) {
+                showMessageBox("❌ 전송할 데이터가 없습니다.", 'error');
+                updateProcessIndicator('전송 중단: 데이터 없음.', false);
+                return;
+            }
+
+            const payload = {
+                data: data,
+                sheetName: sheetName
+            };
+
+            // CORS 우회를 위해 Content-Type 헤더를 제거하고 JSON 문자열을 본문에 담아 보냄.
+            const finalJson = JSON.stringify(payload);
+            console.log("전송할 JSON 문자열:", finalJson.substring(0, 200) + '...'); // 로그 확인용
+
+            try {
+                updateProcessIndicator(`데이터를 '${sheetName}' 시트로 전송 중...`, true);
+                
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    // headers: { 'Content-Type': 'application/json' }, // CORS 우회 목적으로 헤더 제거
+                    body: finalJson
+                });
+
+                // GAS의 401 Unauthorized 오류를 처리하는 것이 매우 중요합니다.
+                if (response.status === 401) {
+                    throw new Error("401 Unauthorized. 회사 계정의 GAS 액세스 대상이 '모든 사용자(Anyone)'인지 확인하거나 로컬 서버를 통해 실행하세요.");
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log("GAS 응답 Raw Data:", result);
+
+                if (result.success) {
+                    showMessageBox(`✅ 데이터 전송 성공! '${result.sheetName}' 시트에 ${result.rowsAppended}행이 추가되었습니다.`, 'success');
+                } else {
+                    throw new Error(result.error || "알 수 없는 GAS 서버 오류 발생");
+                }
+
+            } catch (error) {
+                showMessageBox(`❌ 데이터 전송 오류: ${error.message}. GAS 권한 및 URL을 확인하세요.`, 'error');
+                console.error("Fetch 오류:", error);
+            } finally {
+                updateProcessIndicator('모든 프로세스 완료.', false);
+            }
+        }
+
+        // =======================================================================
+        // 초기 로드
+        // =======================================================================
+        window.onload = function() {
+            // 페이지 로드 시 시트 목록을 가져오는 함수 실행
+            fetchSheetNames();
+        };
+
+    </script>
+</body>
+</html>
