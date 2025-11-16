@@ -142,11 +142,45 @@
 
 <script>
     // ----------------------------------------------------------------------
-    // ⚠️ 중요: 이 URL을 Google Apps Script 배포 후 얻게 되는 실제 URL로 변경해야 합니다.
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzCf-gnZQbzGMluSOYIuZrk_qpLQ0IT4hNrDT6UeTHSCLYdqKHcGvelyMZprtTCef5f/exec"; 
+    // ✅ Google Apps Script URL (순수 문자열)
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwWa7mmT0oFIddfDRmOZ3j5Jza22KEBO7r4lWkjvlYrTBdTzEFlV2KxXArAgj7dWsq2/exec"; 
     // ----------------------------------------------------------------------
     
     const MESSAGE_DURATION = 3000;
+
+    // Helper function for exponential backoff retry (네트워크 안정성 향상을 위해 추가)
+    async function fetchWithRetry(url, options = {}, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const response = await fetch(url, options);
+                
+                // 401/403은 권한 문제이므로, 재시도 없이 즉시 오류 반환
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error(`Apps Script 권한 오류 (HTTP ${response.status}). 배포 설정을 확인하세요.`);
+                }
+                
+                if (response.ok) {
+                    return response;
+                }
+                
+                // 다른 비-OK 응답 코드(예: 500 내부 오류)에 대해 재시도
+                if (i === retries - 1) {
+                    throw new Error(`HTTP 오류: ${response.status}`);
+                }
+                
+            } catch (error) {
+                if (i === retries - 1) {
+                    // 마지막 시도 실패 시 최종적으로 오류 발생
+                    throw error;
+                }
+                // 지수 백오프 대기: 1초, 2초, 4초...
+                const delay = Math.pow(2, i) * 1000;
+                console.warn(`Fetch 시도 실패 (${i + 1}/${retries}). ${delay}ms 후 재시도...`, error.message);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
 
     // 2. 메시지 표시 함수
     function showMessage(message, type = 'success') {
@@ -173,7 +207,7 @@
 
     // 4. 데이터 기록 (POST)
     window.recordTransaction = async function(type) {
-        if (APPS_SCRIPT_URL === "YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE") {
+        if (APPS_SCRIPT_URL.includes("YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE")) {
              showMessage("⚠️ Google Apps Script URL을 먼저 설정해주세요.", 'error');
              return;
         }
@@ -206,12 +240,15 @@
                 memo: memo,
             };
 
-            const response = await fetch(APPS_SCRIPT_URL, {
+            // fetchWithRetry 사용
+            const response = await fetchWithRetry(APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(recordData)
+                // CORS를 명시적으로 처리하는 mode: 'no-cors'는 Apps Script에서 권장되지 않으므로 사용하지 않습니다.
             });
 
+            // 응답이 성공적이면 JSON 파싱 시도
             const result = await response.json();
 
             if (result.status === 'success') {
@@ -225,12 +262,14 @@
                 // 기록 추가 후 바로 새로고침하여 목록 업데이트
                 await refreshRecords(); 
             } else {
+                // Apps Script 내부 로직 오류 (JSON 응답이 왔으나 status가 success가 아님)
                 showMessage(`기록 추가 실패: ${result.message || 'Apps Script 오류'}`, 'error');
             }
 
         } catch (error) {
             console.error("거래 기록 중 오류:", error);
-            showMessage(`기록 추가 중 오류 발생: 네트워크 문제 또는 Apps Script 설정 오류`, 'error');
+            // 오류 메시지 수정: 콘솔에서 자세한 내용을 확인하도록 안내
+            showMessage(`기록 추가 중 오류 발생: ${error.message}. Apps Script 설정을 다시 확인하세요.`, 'error');
         } finally {
             toggleLoading(false);
         }
@@ -238,7 +277,7 @@
 
     // 5. 기록 불러오기 (GET)
     window.refreshRecords = async function() {
-        if (APPS_SCRIPT_URL === "YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE") {
+        if (APPS_SCRIPT_URL.includes("YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE")) {
              showMessage("⚠️ Google Apps Script URL을 먼저 설정해주세요.", 'error');
              return;
         }
@@ -250,7 +289,9 @@
 
         try {
             // GET 요청으로 'action=get'을 포함하여 모든 기록을 요청
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=get`);
+            // fetchWithRetry 사용
+            const response = await fetchWithRetry(`${APPS_SCRIPT_URL}?action=get`);
+            
             const result = await response.json();
 
             if (result.status === 'success' && Array.isArray(result.data)) {
@@ -263,7 +304,7 @@
 
         } catch (error) {
             console.error("기록 불러오기 오류:", error);
-            listElement.innerHTML = `<p class="text-center text-red-500 p-4">기록 불러오기 오류: 네트워크 문제 또는 Apps Script 설정을 확인하세요.</p>`;
+            listElement.innerHTML = `<p class="text-center text-red-500 p-4">기록 불러오기 오류: ${error.message}. Apps Script 설정을 다시 확인하세요.</p>`;
         } finally {
             toggleLoading(false);
         }
