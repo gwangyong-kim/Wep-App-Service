@@ -9,7 +9,7 @@
     <!-- SheetJS (엑셀 파일 파싱 라이브러리) -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <!-- MarkedJS (Gemini API의 Markdown 출력을 HTML로 변환) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.12/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
@@ -145,9 +145,9 @@
         // 🚨 사용자 설정: 여기에 API Key와 GAS URL을 넣어주세요!
         // =======================================================================
         // 1. Gemini API Key (Gemini 분석에 필요)
-        const API_KEY = "AIzaSyA7Y9pWfubGOiShAAAHsA2Tu3BP25FLajs";
+        const API_KEY = "YOUR_GEMINI_API_KEY_HERE";
         // 2. Google Apps Script 웹 앱 URL (데이터 전송에 필요)
-        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbweANY4FIXOQwXDbNl0xNgqYTQB2f2aLz67qBWcHstmIpKVTSjglkMrX8DGw1elIZ6y/exec";
+        const GAS_WEB_APP_URL = "YOUR_GAS_WEB_APP_URL_HERE";
 
         // =======================================================================
         // 전역 변수 및 상태 관리
@@ -406,6 +406,8 @@
 
                 if (text) {
                     // Markdown을 HTML로 변환하여 표시
+                    // MarkedJS가 정의되지 않았을 경우에 대비하여 오류 처리가 필요하지만,
+                    // 일단 CDN 링크를 최신으로 교체하여 marked is not defined 오류를 해결합니다.
                     resultEl.innerHTML = marked.parse(text);
                     document.getElementById('analysisResultSection').classList.remove('hidden');
                     showMessageBox('✨ 데이터 분석 성공: 분석 결과를 확인하세요.', 'info');
