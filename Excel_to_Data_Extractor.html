@@ -51,7 +51,7 @@
             엑셀 to 구글 시트 업로더 (Gemini 자동 분석 포함)
         </h1>
         <p class="text-gray-600 mb-8">
-            엑셀 파일을 선택하고, Gemini의 분석 결과를 확인한 후, 선택된 구글 시트로 데이터를 자동으로 전송합니다.
+            엑셀 파일을 선택하고, Gemini의 분석 결과를 확인한 후, **수동으로** 선택된 구글 시트로 데이터를 전송합니다.
         </p>
 
         <!-- 단계별 컨테이너 -->
@@ -60,7 +60,7 @@
             <!-- 0단계: API Key 설정 (코드로 통합) -->
             <div id="setup-step" class="p-5 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <h2 class="text-xl font-semibold text-yellow-800 mb-2">✅ 설정 완료 (코드 내부 통합)</h2>
-                <p class="text-sm text-yellow-700">Gemini API Key와 Google Apps Script URL은 이 웹 앱의 JavaScript 코드 내부에 직접 설정되어 있습니다. (실행 전 코드 확인 필수)</p>
+                <p class="text-sm text-yellow-700">Gemini API Key와 Google Apps Script URL은 이 웹 앱의 JavaScript 코드 내부에 직접 설정되어 있습니다.</p>
             </div>
 
 
@@ -93,17 +93,23 @@
                 <p id="sheetLoadStatus" class="mt-2 text-sm text-gray-500"></p>
             </div>
 
-            <!-- 3단계: 자동 분석 및 전송 상태 -->
+            <!-- 3단계: 자동 분석 및 수동 전송 -->
             <div id="process-step" class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 자동 분석 및 전송</h2>
-                <p id="autoProcessStatus" class="text-base text-blue-700">파일 로드 후 자동 분석 및 전송을 대기합니다.</p>
-                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-semibold flex items-center">
+                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 분석 및 수동 전송</h2>
+                <p id="autoProcessStatus" class="text-base text-blue-700">파일 로드 후 자동 분석 결과를 대기합니다.</p>
+                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-semibold flex items-center mb-4">
                     <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span id="currentProcessMessage">자동 분석 진행 중...</span>
                 </div>
+                <!-- 수동 전송 버튼 추가 -->
+                <button id="uploadButton" onclick="manualUpload()" 
+                    class="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition duration-150 disabled:bg-gray-400 disabled:cursor-not-allowed" 
+                    disabled>
+                    ✅ 분석된 데이터 구글 시트로 전송 (수동)
+                </button>
             </div>
 
         </div>
@@ -198,6 +204,10 @@
             const file = event.target.files[0];
             if (!file) return;
 
+            // 새로운 파일 로드 시 전송 버튼 비활성화 및 상태 초기화
+            document.getElementById('uploadButton').disabled = true;
+            document.getElementById('autoProcessStatus').innerText = "파일 로드 후 자동 분석 결과를 대기합니다.";
+
             document.getElementById('fileNameDisplay').innerText = `선택된 파일: ${file.name}`;
             document.getElementById('loadingIndicator').classList.remove('hidden');
             document.getElementById('previewSection').classList.add('hidden');
@@ -234,12 +244,7 @@
                     updateProcessIndicator('파일 로드 완료. Gemini 자동 분석 시작...', true);
                     await analyzeData(extractedData);
 
-                    // 분석 완료 후, 바로 전송 시작
-                    if (isAnalysisDone) {
-                        updateProcessIndicator('분석 완료. 구글 시트 전송 시작...', true);
-                        await uploadDataToSheets(extractedData);
-                    }
-
+                    // 자동 전송 코드는 이제 제거됨. 버튼 활성화는 analyzeData 함수에서 처리됩니다.
 
                 } catch (error) {
                     showMessageBox(`❌ 파일 처리 오류: ${error.message}`, 'error');
@@ -344,7 +349,7 @@
             for (let i = 0; i < retries; i++) {
                 try {
                     const response = await fetch(url, options);
-                    if (response.status === 429 && i < retries - 1) { // 429 Too Many Requests
+                    if (response.status === 429 && i < retries - 1) { // 429 Too Many Requests (Gemini API Throttling)
                         const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue;
@@ -370,7 +375,9 @@
             
             if (API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !API_KEY) {
                 showMessageBox("❌ Gemini API Key가 설정되지 않았습니다. 분석을 건너뜁니다.", 'error');
-                isAnalysisDone = true; // 분석 실패로 처리
+                isAnalysisDone = false;
+                document.getElementById('autoProcessStatus').innerText = "❌ Gemini API Key 미설정으로 분석 건너뜀.";
+                document.getElementById('uploadButton').disabled = true;
                 return;
             }
 
@@ -406,8 +413,6 @@
 
                 if (text) {
                     // Markdown을 HTML로 변환하여 표시
-                    // MarkedJS가 정의되지 않았을 경우에 대비하여 오류 처리가 필요하지만,
-                    // 일단 CDN 링크를 최신으로 교체하여 marked is not defined 오류를 해결합니다.
                     resultEl.innerHTML = marked.parse(text);
                     document.getElementById('analysisResultSection').classList.remove('hidden');
                     showMessageBox('✨ 데이터 분석 성공: 분석 결과를 확인하세요.', 'info');
@@ -420,20 +425,39 @@
                 resultEl.innerHTML = `<p class="text-red-600 font-semibold">❌ 분석 오류 발생: ${error.message}.</p>`;
                 document.getElementById('analysisResultSection').classList.remove('hidden');
                 showMessageBox(`❌ 분석 오류 발생: ${error.message}`, 'error');
-                isAnalysisDone = false; // 분석 실패로 전송 중단
+                isAnalysisDone = false;
+                document.getElementById('autoProcessStatus').innerText = "❌ 데이터 분석에 실패했습니다. 전송할 수 없습니다.";
+                document.getElementById('uploadButton').disabled = true;
+
             } finally {
                 updateProcessIndicator('분석 완료.', false);
+                if (isAnalysisDone) {
+                    document.getElementById('uploadButton').disabled = false;
+                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 분석이 완료되었습니다. '전송' 버튼을 눌러주세요.";
+                }
             }
+        }
+        
+        // =======================================================================
+        // 4단계: 수동 전송 함수
+        // =======================================================================
+        
+        async function manualUpload() {
+            // 버튼 비활성화 (중복 클릭 방지)
+            document.getElementById('uploadButton').disabled = true;
+            updateProcessIndicator('수동 전송 요청: 구글 시트 전송 시작...', true);
+            await uploadDataToSheets(extractedData);
         }
 
         // =======================================================================
-        // 4단계: 구글 시트 전송 (자동 실행)
+        // 5단계: 구글 시트 전송 (manualUpload에서 호출)
         // =======================================================================
         
         async function uploadDataToSheets(data) {
             if (!isAnalysisDone) {
                 showMessageBox("❌ 분석 과정이 완료되지 않아 전송을 시작할 수 없습니다. 분석 오류를 확인하세요.", 'error');
                 updateProcessIndicator('전송 중단: 분석 실패.', false);
+                document.getElementById('uploadButton').disabled = true; // 재확인
                 return;
             }
 
@@ -442,18 +466,21 @@
             if (!sheetName) {
                 showMessageBox("❌ 대상 시트가 선택되지 않았습니다.", 'error');
                 updateProcessIndicator('전송 중단: 시트 미선택.', false);
+                document.getElementById('uploadButton').disabled = false; // 재활성화
                 return;
             }
 
             if (GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE" || !GAS_WEB_APP_URL) {
                 showMessageBox("❌ GAS URL이 설정되지 않았습니다. 코드 내부를 확인하세요.", 'error');
                 updateProcessIndicator('전송 중단: GAS URL 미설정.', false);
+                document.getElementById('uploadButton').disabled = false; // 재활성화
                 return;
             }
 
             if (data.length === 0) {
                 showMessageBox("❌ 전송할 데이터가 없습니다.", 'error');
                 updateProcessIndicator('전송 중단: 데이터 없음.', false);
+                document.getElementById('uploadButton').disabled = false; // 재활성화
                 return;
             }
 
@@ -462,20 +489,16 @@
                 sheetName: sheetName
             };
 
-            // CORS 우회를 위해 Content-Type 헤더를 제거하고 JSON 문자열을 본문에 담아 보냄.
             const finalJson = JSON.stringify(payload);
-            console.log("전송할 JSON 문자열:", finalJson.substring(0, 200) + '...'); // 로그 확인용
 
             try {
                 updateProcessIndicator(`데이터를 '${sheetName}' 시트로 전송 중...`, true);
                 
                 const response = await fetch(GAS_WEB_APP_URL, {
                     method: 'POST',
-                    // headers: { 'Content-Type': 'application/json' }, // CORS 우회 목적으로 헤더 제거
                     body: finalJson
                 });
 
-                // GAS의 401 Unauthorized 오류를 처리하는 것이 매우 중요합니다.
                 if (response.status === 401) {
                     throw new Error("401 Unauthorized. 회사 계정의 GAS 액세스 대상이 '모든 사용자(Anyone)'인지 확인하거나 로컬 서버를 통해 실행하세요.");
                 }
@@ -485,10 +508,11 @@
                 }
 
                 const result = await response.json();
-                console.log("GAS 응답 Raw Data:", result);
 
                 if (result.success) {
                     showMessageBox(`✅ 데이터 전송 성공! '${result.sheetName}' 시트에 ${result.rowsAppended}행이 추가되었습니다.`, 'success');
+                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 전송 완료! 다른 파일을 로드하세요.";
+                    // 성공 시 버튼은 비활성화 상태 유지 (중복 전송 방지)
                 } else {
                     throw new Error(result.error || "알 수 없는 GAS 서버 오류 발생");
                 }
@@ -496,6 +520,8 @@
             } catch (error) {
                 showMessageBox(`❌ 데이터 전송 오류: ${error.message}. GAS 권한 및 URL을 확인하세요.`, 'error');
                 console.error("Fetch 오류:", error);
+                document.getElementById('uploadButton').disabled = false; // 실패 시 버튼 재활성화
+                document.getElementById('autoProcessStatus').innerText = `❌ 전송 실패: ${error.message}.`;
             } finally {
                 updateProcessIndicator('모든 프로세스 완료.', false);
             }
@@ -512,5 +538,3 @@
     </script>
 </body>
 </html>
-
-
