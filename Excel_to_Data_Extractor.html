@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>엑셀 데이터 추출 및 업로더</title>
-    <!-- Tailwind CSS CDN -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>엑셀 to 구글 시트 업로더</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS (엑셀 파일 파싱 라이브러리) -->
+
+    <!-- SheetJS (엑셀 미리보기용) -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    <!-- MarkedJS (Gemini API의 Markdown 출력을 HTML로 변환) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
@@ -26,24 +27,16 @@
             padding: 12px 24px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: none; /* 초기에는 숨김 */
+            display: none;
             font-weight: 600;
             transition: opacity 0.3s ease-in-out;
         }
-        .success {
-            background-color: #10b981; /* green-500 */
-            color: white;
-        }
-        .error {
-            background-color: #ef4444; /* red-500 */
-            color: white;
-        }
-        .info {
-            background-color: #3b82f6; /* blue-500 */
-            color: white;
-        }
+        .success { background-color: #10b981; color: white; }
+        .error { background-color: #ef4444; color: white; }
+        .info { background-color: #3b82f6; color: white; }
     </style>
 </head>
+
 <body class="p-4 md:p-8 min-h-screen">
 
     <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
@@ -51,367 +44,243 @@
             엑셀 to 구글 시트 업로더
         </h1>
         <p class="text-gray-600 mb-8">
-            엑셀 파일을 선택하고, 준비된 데이터를 확인한 후, 선택된 구글 시트로 데이터를 전송합니다.
+            엑셀 파일을 선택하여 내용을 미리 확인하고, 선택한 구글 시트로 빠르게 업로드합니다.
         </p>
 
-        <!-- 단계별 컨테이너 -->
         <div class="space-y-8">
 
-            <!-- 1단계: 엑셀 파일 로드 -->
-            <div id="load-step" class="p-5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-indigo-800 mb-4">1단계: 엑셀 파일 로드</h2>
-                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="w-full text-sm text-gray-500
+            <!-- 1단계: 파일 로드 -->
+            <div class="p-5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-indigo-800 mb-4">1단계: 엑셀 파일 선택</h2>
+
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv"
+                    class="w-full text-sm text-gray-500
                     file:mr-4 file:py-2 file:px-4
                     file:rounded-full file:border-0
                     file:text-sm file:font-semibold
                     file:bg-indigo-500 file:text-white
-                    hover:file:bg-indigo-600" onchange="loadExcelFile(event)">
+                    hover:file:bg-indigo-600"
+                    onchange="handleExcelFile(event)" />
+
                 <p id="fileNameDisplay" class="mt-3 text-sm text-gray-700"></p>
                 <div id="loadingIndicator" class="hidden mt-3 text-indigo-600 font-semibold flex items-center">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5"
+                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10"
+                                stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
+                                  5.291A7.962 7.962 0 014 12H0c0 3.042 1.135
+                                  5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span>파일을 읽는 중...</span>
                 </div>
             </div>
-            
+
             <!-- 2단계: 대상 시트 선택 -->
-            <div id="select-sheet-step" class="p-5 bg-purple-50 border border-purple-200 rounded-lg">
+            <div class="p-5 bg-purple-50 border border-purple-200 rounded-lg">
                 <h2 class="text-xl font-semibold text-purple-800 mb-4">2단계: 대상 시트 선택</h2>
-                <label for="sheetNameSelect" class="block text-sm font-medium text-gray-700 mb-2">구글 시트의 대상 시트를 선택하세요:</label>
-                <select id="sheetNameSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-purple-500 focus:ring-purple-500" disabled>
-                    <option value="" disabled selected>시트 목록을 불러오는 중...</option>
+                <select id="sheetNameSelect"
+                        class="block w-full rounded-md border p-2 bg-white shadow-sm"
+                        disabled>
+                    <option value="">시트 목록을 불러오는 중...</option>
                 </select>
-                <p id="sheetLoadStatus" class="mt-2 text-sm text-gray-500"></p>
+                <p id="sheetLoadStatus" class="text-sm text-gray-500 mt-2"></p>
             </div>
 
-            <!-- 3단계: 데이터 확인 및 전송 -->
-            <div id="process-step" class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 데이터 확인 및 전송</h2>
-                <p id="autoProcessStatus" class="text-base text-blue-700">엑셀 파일을 로드하여 데이터 미리보기를 확인하세요.</p>
-                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-semibold flex items-center mb-4">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <!-- 3단계: 업로드 -->
+            <div class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
+                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 업로드</h2>
+
+                <button id="uploadButton"
+                        onclick="uploadExcelFile()"
+                        class="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        disabled>
+                    ✅ 구글 시트로 업로드
+                </button>
+
+                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-medium flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5"
+                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10"
+                                stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0
+                                  12h4zm2 5.291A7.962 7.962 0 014
+                                  12H0c0 3.042 1.135 5.824 3
+                                  7.938l3-2.647z">
+                        </path>
                     </svg>
                     <span id="currentProcessMessage">전송 준비 중...</span>
                 </div>
-                <!-- 수동 전송 버튼 추가 -->
-                <button id="uploadButton" onclick="manualUpload()" 
-                    class="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition duration-150 disabled:bg-gray-400 disabled:cursor-not-allowed" 
-                    disabled>
-                    ✅ 구글 시트로 전송
-                </button>
             </div>
 
         </div>
 
-        <!-- 엑셀 데이터 미리보기 -->
-        <div id="previewSection" class="mt-10 p-6 bg-gray-50 border border-gray-200 rounded-xl shadow-inner hidden">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-3">
-                데이터 미리보기 (상위 10행)
-            </h2>
+        <!-- 미리보기 -->
+        <div id="previewSection" class="mt-10 p-6 bg-gray-50 border rounded-xl hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-3">📄 데이터 미리보기 (상위 10행)</h2>
             <div class="overflow-x-auto max-h-96">
                 <table id="dataTable" class="min-w-full divide-y divide-gray-300">
-                    <thead class="bg-gray-200 sticky top-0">
-                        <!-- 헤더는 JS에서 생성됩니다 -->
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 bg-white">
-                        <!-- 데이터는 JS에서 생성됩니다 -->
-                    </tbody>
+                    <thead class="bg-gray-200 sticky top-0"></thead>
+                    <tbody class="divide-y divide-gray-200 bg-white"></tbody>
                 </table>
             </div>
         </div>
-
     </div>
 
-    <!-- 상태 메시지 박스 -->
-    <div id="message-box" class="opacity-0"></div>
+    <!-- 메시지 박스 -->
+    <div id="message-box"></div>
 
-    <script>
-        // =======================================================================
-        // 🚨 사용자 설정: 여기에 GAS URL을 넣어주세요!
-        // =======================================================================
-        // Google Apps Script 웹 앱 URL (데이터 전송에 필요)
-        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbztEmU4D4hl6AHzcRtmHVSqP9nZa6LxHUZLJXXPArAEzQAt3b2ChtvCDaPHJt85cfuf/exec";
+<script>
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzpnyc43emFxx5UDR35S0GhfyDorpNzfwPAgqN0W3x5jwAlYR_BAh7JEAv-WpHktm3u/exec";
 
-        // =======================================================================
-        // 전역 변수 및 상태 관리
-        // =======================================================================
-        let extractedData = [];
-        let isFileLoaded = false;
-        // isAnalysisDone 상태는 제거됨.
+    let extractedData = [];
+    let selectedFile = null;
 
-        // =======================================================================
-        // UI 유틸리티
-        // =======================================================================
+    /***************************************************
+     * 1) 엑셀 파일 선택 + 미리보기 생성 (SheetJS 사용)
+     ***************************************************/
+    function handleExcelFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
 
-        function showMessageBox(message, type = 'info') {
-            const box = document.getElementById('message-box');
-            box.className = ''; // 기존 클래스 초기화
-            box.classList.add(type);
-            box.classList.add('opacity-100');
-            box.innerText = message;
-            box.style.display = 'block';
+        selectedFile = file;
 
-            // 4초 후 사라지도록 설정
-            setTimeout(() => {
-                box.classList.remove('opacity-100');
-                box.classList.add('opacity-0');
-                setTimeout(() => {
-                    box.style.display = 'none';
-                }, 300); // fade out 시간
-            }, 4000);
-        }
+        document.getElementById('uploadButton').disabled = true;
+        document.getElementById('fileNameDisplay').innerText = `📂 선택된 파일: ${file.name}`;
+        document.getElementById('loadingIndicator').classList.remove('hidden');
 
-        function updateProcessIndicator(message, isWorking = true) {
-            const indicator = document.getElementById('processIndicator');
-            const messageEl = document.getElementById('currentProcessMessage');
-            
-            messageEl.innerText = message;
-            if (isWorking) {
-                indicator.classList.remove('hidden');
-            } else {
-                indicator.classList.add('hidden');
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                extractedData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+                createPreview(extractedData);
+
+                showMessage("✅ 파일 로드 성공!", "success");
+                document.getElementById('uploadButton').disabled = false;
+            } finally {
+                document.getElementById('loadingIndicator').classList.add('hidden');
             }
-        }
-        
-        // =======================================================================
-        // 1단계: 엑셀 파일 로드
-        // =======================================================================
+        };
+        reader.readAsArrayBuffer(file);
+    }
 
-        function loadExcelFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+    function createPreview(data) {
+        const tableHead = document.querySelector("#dataTable thead");
+        const tableBody = document.querySelector("#dataTable tbody");
 
-            // 새로운 파일 로드 시 전송 버튼 비활성화 및 상태 초기화
-            document.getElementById('uploadButton').disabled = true;
-            document.getElementById('autoProcessStatus').innerText = "파일 로드 후 데이터 미리보기를 확인하세요.";
+        tableHead.innerHTML = "";
+        tableBody.innerHTML = "";
 
-            document.getElementById('fileNameDisplay').innerText = `선택된 파일: ${file.name}`;
-            document.getElementById('loadingIndicator').classList.remove('hidden');
-            document.getElementById('previewSection').classList.add('hidden');
-            isFileLoaded = false;
-            updateProcessIndicator('파일 로드 준비 중...', true);
+        if (data.length === 0) return;
 
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    // 첫 번째 시트의 데이터를 가져옴
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    // 데이터를 배열의 배열 (AOA: Array of Arrays) 형태로 변환
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    if (jsonData.length === 0) {
-                        showMessageBox('엑셀 파일에 데이터가 없습니다.', 'error');
-                        return;
-                    }
+        // 헤더
+        const headerRow = data[0];
+        tableHead.innerHTML = `<tr>${headerRow
+            .map(h => `<th class="px-3 py-2 text-left font-medium">${h || ""}</th>`)
+            .join("")}</tr>`;
 
-                    extractedData = jsonData;
-                    displayDataPreview(extractedData);
-                    isFileLoaded = true;
-                    
-                    showMessageBox(`✅ 파일 로드 성공: ${extractedData.length}행 데이터 추출 완료`, 'success');
+        // 상위 10행
+        data.slice(1, 11).forEach(row => {
+            const rowHtml = `<tr>${row
+                .map(c => `<td class="px-3 py-1 text-sm">${c ?? ""}</td>`)
+                .join("")}</tr>`;
+            tableBody.innerHTML += rowHtml;
+        });
 
-                    // 파일 로드 성공 후, 바로 전송 버튼 활성화 및 상태 업데이트 (분석 단계 건너뛰기)
-                    updateProcessIndicator('데이터 로드 완료. 전송 준비됨.', false);
-                    document.getElementById('uploadButton').disabled = false;
-                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 로드가 완료되었습니다. '전송' 버튼을 눌러 구글 시트에 덮어쓰세요.";
+        document.getElementById("previewSection").classList.remove("hidden");
+    }
 
+    /***************************************************
+     * 2) 시트 목록 로딩
+     ***************************************************/
+    async function fetchSheetNames() {
+        const select = document.getElementById("sheetNameSelect");
+        const status = document.getElementById("sheetLoadStatus");
 
-                } catch (error) {
-                    showMessageBox(`❌ 파일 처리 오류: ${error.message}`, 'error');
-                    console.error("파일 처리 오류:", error);
-                    document.getElementById('autoProcessStatus').innerText = `❌ 파일 처리 오류: ${error.message}`;
-                    document.getElementById('uploadButton').disabled = true;
-                } finally {
-                    document.getElementById('loadingIndicator').classList.add('hidden');
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
+        try {
+            const res = await fetch(GAS_WEB_APP_URL);
+            const json = await res.json();
 
-        function displayDataPreview(data) {
-            const table = document.getElementById('dataTable');
-            const tbody = table.querySelector('tbody');
-            const thead = table.querySelector('thead');
-            
-            // 테이블 초기화
-            tbody.innerHTML = '';
-            thead.innerHTML = '';
-            
-            if (data.length === 0) {
-                document.getElementById('previewSection').classList.add('hidden');
-                return;
-            }
-
-            // 헤더 생성 (첫 행)
-            const headerRow = data[0];
-            const headerHtml = `<tr>${headerRow.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h || ''}</th>`).join('')}</tr>`;
-            thead.innerHTML = headerHtml;
-
-            // 데이터 행 생성 (최대 10행)
-            const rows = data.slice(1, 11); // 헤더 제외하고 10개만 미리보기
-            rows.forEach(row => {
-                const rowHtml = `<tr>${row.map(cell => `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${cell === null || cell === undefined ? '' : cell}</td>`).join('')}</tr>`;
-                tbody.innerHTML += rowHtml;
+            select.innerHTML = "";
+            json.sheetNames.forEach(name => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
             });
 
-            document.getElementById('previewSection').classList.remove('hidden');
+            select.disabled = false;
+            status.innerHTML = "✅ 시트 목록 로드 완료";
+
+        } catch (err) {
+            status.innerHTML = "❌ 시트 목록 로드 실패";
+        }
+    }
+
+    /***************************************************
+     * 3) 파일 업로드 (Binary 그대로 전송)
+     ***************************************************/
+    async function uploadExcelFile() {
+        if (!selectedFile) {
+            showMessage("❌ 파일이 없습니다!", "error");
+            return;
         }
 
-        // =======================================================================
-        // 2단계: 시트 목록 로드 (페이지 로드 시 자동 실행)
-        // =======================================================================
+        document.getElementById("uploadButton").disabled = true;
+        updateProcess("업로드 중...");
 
-        async function fetchSheetNames() {
-            const selectEl = document.getElementById('sheetNameSelect');
-            const statusEl = document.getElementById('sheetLoadStatus');
-            selectEl.disabled = true;
+        try {
+            const res = await fetch(GAS_WEB_APP_URL, {
+                method: "POST",
+                body: selectedFile
+            });
 
-            if (GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE" || !GAS_WEB_APP_URL) {
-                statusEl.innerHTML = '<span class="text-red-500 font-semibold">❌ GAS URL이 설정되지 않았습니다. 코드 내부를 확인하세요.</span>';
-                selectEl.innerHTML = '<option value="" disabled selected>GAS URL 미설정</option>';
-                return;
+            const json = await res.json();
+
+            if (json.success) {
+                showMessage(`✅ 업로드 성공! (${json.rows}행 변환)`, "success");
+            } else {
+                showMessage(`❌ 업로드 오류: ${json.error}`, "error");
             }
-            
-            statusEl.innerText = '구글 시트의 시트 목록을 가져오는 중...';
-
-            try {
-                // GAS 웹 앱에 GET 요청을 보냄
-                const response = await fetch(GAS_WEB_APP_URL, {
-                    method: 'GET',
-                    mode: 'cors'
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-
-                if (result.success && Array.isArray(result.sheetNames)) {
-                    selectEl.innerHTML = '';
-                    result.sheetNames.forEach(name => {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        option.innerText = name;
-                        selectEl.appendChild(option);
-                    });
-                    selectEl.disabled = false;
-                    statusEl.innerHTML = `<span class="text-green-600">✅ 시트 목록 ${result.sheetNames.length}개 로드 완료.</span>`;
-                    // 첫 번째 시트를 기본 선택
-                    if (result.sheetNames.length > 0) {
-                        selectEl.value = result.sheetNames[0];
-                    }
-                } else {
-                    throw new Error(result.error || "GAS 서버에서 유효하지 않은 응답을 받았습니다.");
-                }
-
-            } catch (error) {
-                statusEl.innerHTML = `<span class="text-red-500 font-semibold">❌ 시트 목록 로드 오류: ${error.message}. GAS 권한 및 URL을 확인하세요.</span>`;
-                console.error("시트 목록 로드 오류:", error);
-                selectEl.innerHTML = '<option value="" disabled selected>오류로 목록 로드 실패</option>';
-            }
+        } catch (err) {
+            showMessage(`❌ 서버 오류: ${err.message}`, "error");
+        } finally {
+            updateProcess("", false);
+            document.getElementById("uploadButton").disabled = false;
         }
+    }
 
-        // =======================================================================
-        // 3단계: 수동 전송 함수
-        // =======================================================================
-        
-        async function manualUpload() {
-            // 버튼 비활성화 (중복 클릭 방지)
-            document.getElementById('uploadButton').disabled = true;
-            updateProcessIndicator('수동 전송 요청: 구글 시트 전송 시작...', true);
-            await uploadDataToSheets(extractedData);
-        }
+    /***************************************************
+     * UI 메시지 함수
+     ***************************************************/
+    function showMessage(msg, type = "info") {
+        const box = document.getElementById("message-box");
+        box.className = type;
+        box.textContent = msg;
+        box.style.display = "block";
+        box.style.opacity = 1;
 
-        // =======================================================================
-        // 4단계: 구글 시트 전송 (manualUpload에서 호출)
-        // =======================================================================
-        
-        async function uploadDataToSheets(data) {
-            const sheetName = document.getElementById('sheetNameSelect').value;
+        setTimeout(() => {
+            box.style.opacity = 0;
+            setTimeout(() => (box.style.display = "none"), 300);
+        }, 3000);
+    }
 
-            if (!sheetName) {
-                showMessageBox("❌ 대상 시트가 선택되지 않았습니다.", 'error');
-                updateProcessIndicator('전송 중단: 시트 미선택.', false);
-                document.getElementById('uploadButton').disabled = false; // 재활성화
-                return;
-            }
+    function updateProcess(message, show = true) {
+        const el = document.getElementById("processIndicator");
+        const msg = document.getElementById("currentProcessMessage");
 
-            if (GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE" || !GAS_WEB_APP_URL) {
-                showMessageBox("❌ GAS URL이 설정되지 않았습니다. 코드 내부를 확인하세요.", 'error');
-                updateProcessIndicator('전송 중단: GAS URL 미설정.', false);
-                document.getElementById('uploadButton').disabled = false; // 재활성화
-                return;
-            }
+        msg.textContent = message;
+        el.classList.toggle("hidden", !show);
+    }
 
-            if (data.length === 0) {
-                showMessageBox("❌ 전송할 데이터가 없습니다.", 'error');
-                updateProcessIndicator('전송 중단: 데이터 없음.', false);
-                document.getElementById('uploadButton').disabled = false; // 재활성화
-                return;
-            }
-
-            const payload = {
-                data: data,
-                sheetName: sheetName
-            };
-
-            const finalJson = JSON.stringify(payload);
-
-            try {
-                updateProcessIndicator(`데이터를 '${sheetName}' 시트로 전송 중 (기존 데이터 삭제 후 덮어쓰기)...`, true);
-                
-                // Gemini API에 사용되던 지수 백오프 fetch 대신 일반 fetch를 사용
-                const response = await fetch(GAS_WEB_APP_URL, {
-                    method: 'POST',
-                    body: finalJson
-                });
-
-                if (response.status === 401) {
-                    throw new Error("401 Unauthorized. 회사 계정의 GAS 액세스 대상이 '모든 사용자(Anyone)'인지 확인하거나 로컬 서버를 통해 실행하세요.");
-                }
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-
-                if (result.success) {
-                    showMessageBox(`✅ 데이터 전송 성공! '${result.sheetName}' 시트의 기존 데이터를 삭제하고 ${result.rowsWritten}행을 덮어썼습니다.`, 'success');
-                    document.getElementById('autoProcessStatus').innerText = "✅ 데이터 전송 완료! 다른 파일을 로드하세요.";
-                    // 성공 시 버튼은 비활성화 상태 유지 (중복 전송 방지)
-                } else {
-                    throw new Error(result.error || "알 수 없는 GAS 서버 오류 발생");
-                }
-
-            } catch (error) {
-                showMessageBox(`❌ 데이터 전송 오류: ${error.message}. GAS 권한 및 URL을 확인하세요.`, 'error');
-                console.error("Fetch 오류:", error);
-                document.getElementById('uploadButton').disabled = false; // 실패 시 버튼 재활성화
-                document.getElementById('autoProcessStatus').innerText = `❌ 전송 실패: ${error.message}.`;
-            } finally {
-                updateProcessIndicator('모든 프로세스 완료.', false);
-            }
-        }
-
-        // =======================================================================
-        // 초기 로드
-        // =======================================================================
-        window.onload = function() {
-            // 페이지 로드 시 시트 목록을 가져오는 함수 실행
-            fetchSheetNames();
-        };
-
-    </script>
+    /***************************************************/
+    window.onload = fetchSheetNames;
+</script>
 </body>
 </html>
