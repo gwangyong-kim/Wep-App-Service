@@ -1,289 +1,165 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>엑셀 to 구글 시트 업로더</title>
+    <meta charset="UTF-8">
+    <title>엑셀 업로더</title>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- SheetJS (엑셀 미리보기용) -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-        }
-        /* 상태 메시지 박스 스타일 */
+        body { background: #f6f8fa; font-family: Arial, sans-serif; }
         #message-box {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            padding: 12px 24px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: none;
-            font-weight: 600;
-            transition: opacity 0.3s ease-in-out;
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 8px; display: none; color: white;
+            font-weight: bold;
         }
-        .success { background-color: #10b981; color: white; }
-        .error { background-color: #ef4444; color: white; }
-        .info { background-color: #3b82f6; color: white; }
+        .success { background: #16a34a; }
+        .error { background: #dc2626; }
     </style>
 </head>
 
-<body class="p-4 md:p-8 min-h-screen">
+<body class="p-6">
 
-    <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
-        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
-            엑셀 to 구글 시트 업로더
-        </h1>
-        <p class="text-gray-600 mb-8">
-            엑셀 파일을 선택하여 내용을 미리 확인하고, 선택한 구글 시트로 빠르게 업로드합니다.
-        </p>
+<div class="max-w-3xl mx-auto bg-white shadow-lg p-6 rounded-lg">
 
-        <div class="space-y-8">
+    <h1 class="text-2xl font-bold mb-4">엑셀 → 구글 시트 업로더</h1>
 
-            <!-- 1단계: 파일 로드 -->
-            <div class="p-5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-indigo-800 mb-4">1단계: 엑셀 파일 선택</h2>
+    <!-- 1. 파일 선택 -->
+    <input id="fileInput" type="file" accept=".xlsx,.xls,.csv"
+           class="mb-4"
+           onchange="loadExcel(event)">
 
-                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv"
-                    class="w-full text-sm text-gray-500
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-full file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-indigo-500 file:text-white
-                    hover:file:bg-indigo-600"
-                    onchange="handleExcelFile(event)" />
+    <p id="fileName" class="text-sm text-gray-600 mb-4"></p>
 
-                <p id="fileNameDisplay" class="mt-3 text-sm text-gray-700"></p>
-                <div id="loadingIndicator" class="hidden mt-3 text-indigo-600 font-semibold flex items-center">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5"
-                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10"
-                                stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
-                                  5.291A7.962 7.962 0 014 12H0c0 3.042 1.135
-                                  5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>파일을 읽는 중...</span>
-                </div>
-            </div>
+    <!-- 2. 시트 선택 -->
+    <select id="sheetSelect" class="p-2 border rounded mb-4 bg-white" disabled>
+        <option>시트 목록 로딩중...</option>
+    </select>
 
-            <!-- 2단계: 대상 시트 선택 -->
-            <div class="p-5 bg-purple-50 border border-purple-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-purple-800 mb-4">2단계: 대상 시트 선택</h2>
-                <select id="sheetNameSelect"
-                        class="block w-full rounded-md border p-2 bg-white shadow-sm"
-                        disabled>
-                    <option value="">시트 목록을 불러오는 중...</option>
-                </select>
-                <p id="sheetLoadStatus" class="text-sm text-gray-500 mt-2"></p>
-            </div>
+    <!-- 3. 업로드 버튼 -->
+    <button id="uploadBtn"
+            class="w-full bg-blue-600 text-white p-3 rounded font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+            onclick="uploadData()" disabled>
+        업로드
+    </button>
 
-            <!-- 3단계: 업로드 -->
-            <div class="p-5 bg-blue-50 border border-blue-200 rounded-lg">
-                <h2 class="text-xl font-semibold text-blue-800 mb-4">3단계: 업로드</h2>
-
-                <button id="uploadButton"
-                        onclick="uploadExcelFile()"
-                        class="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        disabled>
-                    ✅ 구글 시트로 업로드
-                </button>
-
-                <div id="processIndicator" class="hidden mt-3 text-blue-600 font-medium flex items-center">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5"
-                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10"
-                                stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0
-                                  12h4zm2 5.291A7.962 7.962 0 014
-                                  12H0c0 3.042 1.135 5.824 3
-                                  7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <span id="currentProcessMessage">전송 준비 중...</span>
-                </div>
-            </div>
-
-        </div>
-
-        <!-- 미리보기 -->
-        <div id="previewSection" class="mt-10 p-6 bg-gray-50 border rounded-xl hidden">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-3">📄 데이터 미리보기 (상위 10행)</h2>
-            <div class="overflow-x-auto max-h-96">
-                <table id="dataTable" class="min-w-full divide-y divide-gray-300">
-                    <thead class="bg-gray-200 sticky top-0"></thead>
-                    <tbody class="divide-y divide-gray-200 bg-white"></tbody>
-                </table>
-            </div>
-        </div>
+    <!-- 미리보기 -->
+    <h2 class="text-xl font-semibold mt-6 mb-3">미리보기 (상위 10행)</h2>
+    <div class="overflow-x-auto max-h-96 border rounded">
+        <table id="previewTable" class="w-full text-sm"></table>
     </div>
 
-    <!-- 메시지 박스 -->
-    <div id="message-box"></div>
+</div>
+
+<div id="message-box"></div>
 
 <script>
-    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyivPDrgWd1eXjF94AZOugXseE03b1LH4xGQSF191xHj4BDRa3mFeFUN8w8WQIt8_Y/exec";
+const GAS_URL = "YOUR_WEB_APP_URL";   // 네가 사용하던 GitHub 방식 그대로
 
-    let extractedData = [];
-    let selectedFile = null;
+let extractedData = [];
 
-    /***************************************************
-     * 1) 엑셀 파일 선택 + 미리보기 생성 (SheetJS 사용)
-     ***************************************************/
-    function handleExcelFile(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+// 메시지 표시
+function showMsg(msg, type="success") {
+    const box = document.getElementById("message-box");
+    box.className = type;
+    box.textContent = msg;
+    box.style.display = "block";
 
-        selectedFile = file;
+    setTimeout(() => box.style.display = "none", 3000);
+}
 
-        document.getElementById('uploadButton').disabled = true;
-        document.getElementById('fileNameDisplay').innerText = `📂 선택된 파일: ${file.name}`;
-        document.getElementById('loadingIndicator').classList.remove('hidden');
+// 1. 엑셀 로드
+function loadExcel(e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                extractedData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    document.getElementById("fileName").textContent = "선택된 파일: " + file.name;
 
-                createPreview(extractedData);
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const workbook = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        extractedData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-                showMessage("✅ 파일 로드 성공!", "success");
-                document.getElementById('uploadButton').disabled = false;
-            } finally {
-                document.getElementById('loadingIndicator').classList.add('hidden');
-            }
-        };
-        reader.readAsArrayBuffer(file);
-    }
+        previewTable(extractedData);
+        document.getElementById("uploadBtn").disabled = false;
+    };
+    reader.readAsArrayBuffer(file);
+}
 
-    function createPreview(data) {
-        const tableHead = document.querySelector("#dataTable thead");
-        const tableBody = document.querySelector("#dataTable tbody");
+// 미리보기
+function previewTable(data) {
+    const table = document.getElementById("previewTable");
+    table.innerHTML = "";
 
-        tableHead.innerHTML = "";
-        tableBody.innerHTML = "";
+    if (data.length === 0) return;
 
-        if (data.length === 0) return;
+    const rows = data.slice(0, 10);
+    rows.forEach((row, i) => {
+        const tr = document.createElement("tr");
+        row.forEach(cell => {
+            const td = document.createElement(i === 0 ? "th" : "td");
+            td.className = "border p-2";
+            td.textContent = cell ?? "";
+            tr.appendChild(td);
+        });
+        table.appendChild(tr);
+    });
+}
 
-        // 헤더
-        const headerRow = data[0];
-        tableHead.innerHTML = `<tr>${headerRow
-            .map(h => `<th class="px-3 py-2 text-left font-medium">${h || ""}</th>`)
-            .join("")}</tr>`;
+// 2. 시트 이름 로드
+async function loadSheetNames() {
+    const select = document.getElementById("sheetSelect");
+    try {
+        const res = await fetch(GAS_URL);
+        const json = await res.json();
 
-        // 상위 10행
-        data.slice(1, 11).forEach(row => {
-            const rowHtml = `<tr>${row
-                .map(c => `<td class="px-3 py-1 text-sm">${c ?? ""}</td>`)
-                .join("")}</tr>`;
-            tableBody.innerHTML += rowHtml;
+        if (!json.success) throw json.error;
+
+        select.innerHTML = "";
+        json.sheetNames.forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
         });
 
-        document.getElementById("previewSection").classList.remove("hidden");
+        select.disabled = false;
+
+    } catch (err) {
+        select.innerHTML = "<option>로드 실패</option>";
+    }
+}
+
+// 3. 업로드
+async function uploadData() {
+    const sheetName = document.getElementById("sheetSelect").value;
+
+    if (!sheetName) {
+        showMsg("시트를 선택하세요", "error");
+        return;
     }
 
-    /***************************************************
-     * 2) 시트 목록 로딩
-     ***************************************************/
-    async function fetchSheetNames() {
-        const select = document.getElementById("sheetNameSelect");
-        const status = document.getElementById("sheetLoadStatus");
+    try {
+        const res = await fetch(GAS_URL, {
+            method: "POST",
+            body: JSON.stringify({ data: extractedData, sheetName })
+        });
 
-        try {
-            const res = await fetch(GAS_WEB_APP_URL);
-            const json = await res.json();
+        const json = await res.json();
 
-            select.innerHTML = "";
-            json.sheetNames.forEach(name => {
-                const opt = document.createElement("option");
-                opt.value = name;
-                opt.textContent = name;
-                select.appendChild(opt);
-            });
+        if (json.success)
+            showMsg(`업로드 완료! ${json.rowsWritten}행 반영`, "success");
+        else
+            showMsg(json.error, "error");
 
-            select.disabled = false;
-            status.innerHTML = "✅ 시트 목록 로드 완료";
-
-        } catch (err) {
-            status.innerHTML = "❌ 시트 목록 로드 실패";
-        }
+    } catch (err) {
+        showMsg("업로드 오류: " + err.message, "error");
     }
+}
 
-    /***************************************************
-     * 3) 파일 업로드 (Binary 그대로 전송)
-     ***************************************************/
-    async function uploadExcelFile() {
-        if (!selectedFile) {
-            showMessage("❌ 파일이 없습니다!", "error");
-            return;
-        }
-
-        document.getElementById("uploadButton").disabled = true;
-        updateProcess("업로드 중...");
-
-        try {
-            const res = await fetch(GAS_WEB_APP_URL, {
-                method: "POST",
-                body: selectedFile
-            });
-
-            const json = await res.json();
-
-            if (json.success) {
-                showMessage(`✅ 업로드 성공! (${json.rows}행 변환)`, "success");
-            } else {
-                showMessage(`❌ 업로드 오류: ${json.error}`, "error");
-            }
-        } catch (err) {
-            showMessage(`❌ 서버 오류: ${err.message}`, "error");
-        } finally {
-            updateProcess("", false);
-            document.getElementById("uploadButton").disabled = false;
-        }
-    }
-
-    /***************************************************
-     * UI 메시지 함수
-     ***************************************************/
-    function showMessage(msg, type = "info") {
-        const box = document.getElementById("message-box");
-        box.className = type;
-        box.textContent = msg;
-        box.style.display = "block";
-        box.style.opacity = 1;
-
-        setTimeout(() => {
-            box.style.opacity = 0;
-            setTimeout(() => (box.style.display = "none"), 300);
-        }, 3000);
-    }
-
-    function updateProcess(message, show = true) {
-        const el = document.getElementById("processIndicator");
-        const msg = document.getElementById("currentProcessMessage");
-
-        msg.textContent = message;
-        el.classList.toggle("hidden", !show);
-    }
-
-    /***************************************************/
-    window.onload = fetchSheetNames;
+window.onload = loadSheetNames;
 </script>
 </body>
 </html>
-
-
-
